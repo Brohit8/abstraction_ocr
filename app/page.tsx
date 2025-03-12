@@ -112,7 +112,7 @@ export default function PDFViewer() {
 
       // Find the page to update
       const pageIndex = noteObj.document.pages.findIndex(
-        p => p.number === pageNum
+        (p: PageNote) => p.number === pageNum
       );
 
       if (pageIndex >= 0) {
