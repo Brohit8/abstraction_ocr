@@ -54,7 +54,7 @@ export default function PDFViewer() {
   const [pdfLoadSource, setPdfLoadSource] = useState<'default' | 'file' | null>(null);
   const [isEditingPage, setIsEditingPage] = useState(false);
   const [pageInputValue, setPageInputValue] = useState('');
-  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  const [windowWidth, setWindowWidth] = useState(0);
   const [isCompactView, setIsCompactView] = useState(false);
 
   // Notes related state
@@ -64,6 +64,8 @@ export default function PDFViewer() {
 
   // Check window size for responsive layout
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     const handleResize = () => {
       setWindowWidth(window.innerWidth);
       setIsCompactView(window.innerWidth < 640); // sm breakpoint
@@ -109,7 +111,6 @@ export default function PDFViewer() {
   };
 
   // Create or update the JSON structure when text changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const updateNoteJson = useCallback((newText: string): string => {
     try {
       let noteObj: DocumentNotes;
