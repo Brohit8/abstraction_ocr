@@ -1,12 +1,12 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
-import type { PDFDocumentProxy } from 'pdfjs-dist/types/src/display/api';
+import { useEffect, useRef, useState, MouseEvent } from 'react';
+import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist/types/src/display/api';
 
 export default function PDFViewer() {
-  const canvasRef = useRef(null);
-  const containerRef = useRef(null);
-  const renderTaskRef = useRef<any>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const renderTaskRef = useRef<RenderTask & { pageNumber?: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [scale, setScale] = useState(1.0); // Start with scale 1.0, will be adjusted by fitToPage
@@ -67,7 +67,7 @@ export default function PDFViewer() {
   };
 
   // Panning handlers
-  const handleMouseDown = (e) => {
+  const handleMouseDown = (e: MouseEvent<HTMLDivElement>) => {
     if (scale > 1) {
       setIsPanning(true);
       setStartPanPos({
@@ -77,7 +77,7 @@ export default function PDFViewer() {
     }
   };
 
-  const handleMouseMove = (e) => {
+  const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
     if (!isPanning) return;
 
     const newX = e.clientX - startPanPos.x;
@@ -97,15 +97,15 @@ export default function PDFViewer() {
     setIsPanning(false);
   };
 
-  const handleFileChange = (event) => {
-    const file = event.target.files[0];
-    if (file && file.type === 'application/pdf') {
-      setPdfFile(file);
-      setFileName(file.name);
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files[0] && files[0].type === 'application/pdf') {
+      setPdfFile(files[0]);
+      setFileName(files[0].name);
       setPageNum(1); // Reset to first page
       setPanPosition({ x: 0, y: 0 }); // Reset panning
       setError(null);
-    } else if (file) {
+    } else if (files && files[0]) {
       setError('Please select a valid PDF file');
     }
   };
@@ -155,10 +155,12 @@ export default function PDFViewer() {
               }
             }, 100);
           }
-        } catch (error: any) {
+        } catch (error) {
           if (!isCancelled) {
             console.error('PDF loading error:', error);
-            setError(error.message || 'Failed to load PDF');
+            setError(
+              error instanceof Error ? error.message : 'Failed to load PDF'
+            );
             setIsLoading(false);
           }
         }
@@ -170,7 +172,7 @@ export default function PDFViewer() {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [pdfFile, pdfDoc, fitToPage]);
 
   // Handle uploaded PDF file
   useEffect(() => {
@@ -217,10 +219,12 @@ export default function PDFViewer() {
             }
           }, 100);
         }
-      } catch (error: any) {
+      } catch (error) {
         if (!isCancelled) {
           console.error('PDF loading error:', error);
-          setError(error.message || 'Failed to load PDF');
+          setError(
+            error instanceof Error ? error.message : 'Failed to load PDF'
+          );
           setIsLoading(false);
         }
       }
@@ -231,7 +235,7 @@ export default function PDFViewer() {
     return () => {
       isCancelled = true;
     };
-  }, [pdfFile]);
+  }, [pdfFile, fitToPage]);
 
   // Render the current page whenever page number or scale changes
   useEffect(() => {
@@ -276,9 +280,9 @@ export default function PDFViewer() {
         if (renderTaskRef.current) {
           try {
             await renderTaskRef.current.promise;
-          } catch (err: any) {
+          } catch (err) {
             // Ignore cancellation errors
-            if (err && err.name !== 'RenderingCancelledException') {
+            if (err instanceof Error && err.name !== 'RenderingCancelledException') {
               throw err;
             }
           }
@@ -286,6 +290,10 @@ export default function PDFViewer() {
 
         // Render the page into the canvas
         const canvasContext = canvas.getContext('2d');
+        if (!canvasContext) {
+          console.error('Canvas context is null');
+          return;
+        }
         const renderContext = { canvasContext, viewport };
         const renderTask = page.render(renderContext);
 
@@ -301,10 +309,12 @@ export default function PDFViewer() {
           // Set page rendering state to false when complete
           setIsPageRendering(false);
         }
-      } catch (error: any) {
+      } catch (error) {
         if (!isCancelled) {
           console.error('PDF rendering error:', error);
-          setError(error.message || 'Failed to render PDF');
+          setError(
+            error instanceof Error ? error.message : 'Failed to render PDF'
+          );
           setIsLoading(false);
           setIsPageRendering(false); // Make sure to reset the rendering state on error
         }
