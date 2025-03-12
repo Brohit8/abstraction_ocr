@@ -36,6 +36,7 @@ interface PageNotes {
 export default function PDFViewer() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const controlsRef = useRef<HTMLDivElement | null>(null);
   const renderTaskRef = useRef<RenderTask & { pageNumber?: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -53,11 +54,29 @@ export default function PDFViewer() {
   const [pdfLoadSource, setPdfLoadSource] = useState<'default' | 'file' | null>(null);
   const [isEditingPage, setIsEditingPage] = useState(false);
   const [pageInputValue, setPageInputValue] = useState('');
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  const [isCompactView, setIsCompactView] = useState(false);
 
   // Notes related state
   const [notes, setNotes] = useState<PageNotes>({});
   const [currentNote, setCurrentNote] = useState('');
   const MAX_NOTE_LENGTH = 10000; // Increased character limit for formatted notes
+
+  // Check window size for responsive layout
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+      setIsCompactView(window.innerWidth < 640); // sm breakpoint
+    };
+
+    // Set initial value
+    handleResize();
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
   // Create empty notes document structure (with option for single page or page range)
   const getEmptyNotes = (totalPages: number, specificPage?: number): DocumentNotes => {
@@ -567,45 +586,14 @@ export default function PDFViewer() {
     };
   }, [pdfDoc, pageNum, scale]);
 
-  return (
-    <div className="pdf-container mx-auto p-4 w-full">
-      {error && (
-        <div className="error-message bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          Error: {error}
-        </div>
-      )}
-
-      <div className="pdf-header flex items-center justify-between mb-4 bg-gray-100 p-3 rounded-lg">
-        <div className="file-info flex items-center">
-          <span className="font-medium mr-2">Current file:</span>
-          <span className="text-gray-700 truncate max-w-xs">{fileName}</span>
-        </div>
-
-        <div className="upload-controls">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept="application/pdf"
-            className="hidden"
-            id="pdf-upload"
-          />
-          <button
-            onClick={handleUploadClick}
-            className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition flex items-center"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
-            Upload PDF
-          </button>
-        </div>
-      </div>
-
-      <div className="pdf-controls flex items-center justify-between mb-4 bg-gray-100 p-3 rounded-lg">
-        <div className="page-controls flex items-center space-x-2">
+  // Render the PDF controls based on screen size
+  const renderPDFControls = () => {
+    return (
+      <div
+        ref={controlsRef}
+        className={`pdf-controls ${isCompactView ? 'flex flex-col space-y-2' : 'flex items-center justify-between'} mb-4 bg-gray-100 p-3 rounded-lg`}
+      >
+        <div className={`page-controls ${isCompactView ? 'w-full' : ''} flex items-center ${isCompactView ? 'justify-between' : 'space-x-2'}`}>
           <button
             onClick={goToPrevPage}
             disabled={isLoading || pageNum <= 1}
@@ -649,7 +637,7 @@ export default function PDFViewer() {
           </button>
         </div>
 
-        <div className="zoom-controls flex items-center space-x-2">
+        <div className={`zoom-controls ${isCompactView ? 'w-full' : ''} flex items-center ${isCompactView ? 'justify-between' : 'space-x-2'} mt-2`}>
           <button
             onClick={zoomOut}
             disabled={isLoading}
@@ -679,6 +667,47 @@ export default function PDFViewer() {
           </button>
         </div>
       </div>
+    );
+  };
+
+  return (
+    <div className="pdf-container mx-auto p-4 w-full">
+      {error && (
+        <div className="error-message bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          Error: {error}
+        </div>
+      )}
+
+      <div className={`pdf-header ${isCompactView ? 'flex flex-col space-y-2' : 'flex items-center justify-between'} mb-4 bg-gray-100 p-3 rounded-lg`}>
+        <div className={`file-info ${isCompactView ? 'w-full' : ''} flex items-center`}>
+          <span className="font-medium mr-2">Current file:</span>
+          <span className="text-gray-700 truncate max-w-xs">{fileName}</span>
+        </div>
+
+        <div className={`upload-controls ${isCompactView ? 'w-full flex justify-end' : ''}`}>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept="application/pdf"
+            className="hidden"
+            id="pdf-upload"
+          />
+          <button
+            onClick={handleUploadClick}
+            className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition flex items-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            Upload PDF
+          </button>
+        </div>
+      </div>
+
+      {renderPDFControls()}
 
       {/* Main content area with responsive design */}
       <div className="flex flex-col lg:flex-row gap-4">
