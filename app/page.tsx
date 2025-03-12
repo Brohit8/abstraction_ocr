@@ -89,8 +89,6 @@ export default function PDFViewer() {
     };
   };
 
-  // This function is no longer needed since we handle parsing in the effect directly
-
   // Create or update the JSON structure when text changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const updateNoteJson = useCallback((newText: string): string => {
@@ -172,6 +170,7 @@ export default function PDFViewer() {
     }
   }, []);
 
+  /* eslint-disable react-hooks/exhaustive-deps */
   // Effect to update current note when page changes
   useEffect(() => {
     if (notes[pageNum]) {
@@ -180,7 +179,9 @@ export default function PDFViewer() {
         const noteObj = JSON.parse(notes[pageNum]);
         if (noteObj && noteObj.document && noteObj.document.pages) {
           // Find the page note that matches the current page
-          const pageNote = noteObj.document.pages.find(p => p.number === pageNum);
+          const pageNote = noteObj.document.pages.find(
+            (p: PageNote) => p.number === pageNum
+          );
           if (pageNote) {
             // Set just the text content, not the whole JSON
             setCurrentNote(pageNote.text);
@@ -215,6 +216,7 @@ export default function PDFViewer() {
       setCurrentNote('');
     }
   }, [pageNum, notes, numPages]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   // Save notes to session storage whenever they change
   useEffect(() => {
