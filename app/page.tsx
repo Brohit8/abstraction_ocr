@@ -1,22 +1,24 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import type { PDFDocumentProxy } from 'pdfjs-dist/types/src/display/api';
 
 export default function PDFViewer() {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
-  const renderTaskRef = useRef(null);
-  const fileInputRef = useRef(null);
+  const renderTaskRef = useRef<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [scale, setScale] = useState(1.0); // Start with scale 1.0, will be adjusted by fitToPage
   const [pageNum, setPageNum] = useState(1);
-  const [numPages, setNumPages] = useState(null);
-  const [pdfDoc, setPdfDoc] = useState(null);
+  const [numPages, setNumPages] = useState<number | null>(null);
+  const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
   const [startPanPos, setStartPanPos] = useState({ x: 0, y: 0 });
-  const [pdfFile, setPdfFile] = useState(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState('No file selected');
+  const [isPageRendering, setIsPageRendering] = useState(false);
 
   const goToNextPage = () => {
     if (pageNum < (numPages || 1)) {
@@ -41,7 +43,6 @@ export default function PDFViewer() {
     setScale(prevScale => Math.max(prevScale - 0.25, 0.5));
   };
 
-  // Fit the PDF to the container size - this previously worked
   const fitToPage = async () => {
     if (!pdfDoc || !containerRef.current) return;
 
@@ -126,6 +127,7 @@ export default function PDFViewer() {
 
           // Import pdfjs-dist dynamically for client-side rendering
           const pdfJS = await import('pdfjs-dist');
+          const { getDocument } = pdfJS;
 
           // Set up the worker
           const workerSrc = new URL(
@@ -136,12 +138,12 @@ export default function PDFViewer() {
           pdfJS.GlobalWorkerOptions.workerSrc = workerSrc;
 
           // Load the default PDF document
-          const loadingTask = pdfJS.getDocument('example.pdf');
+          const loadingTask = getDocument('example.pdf');
           const pdf = await loadingTask.promise;
 
           if (!isCancelled) {
             console.log(`Default PDF loaded successfully with ${pdf.numPages} pages`);
-            setPdfDoc(pdf);
+            setPdfDoc(pdf as PDFDocumentProxy);
             setNumPages(pdf.numPages);
             setFileName('example.pdf');
             setError(null);
@@ -153,7 +155,7 @@ export default function PDFViewer() {
               }
             }, 100);
           }
-        } catch (error) {
+        } catch (error: any) {
           if (!isCancelled) {
             console.error('PDF loading error:', error);
             setError(error.message || 'Failed to load PDF');
@@ -183,6 +185,7 @@ export default function PDFViewer() {
 
         // Import pdfjs-dist dynamically for client-side rendering
         const pdfJS = await import('pdfjs-dist');
+        const { getDocument } = pdfJS;
 
         // Set up the worker if not already set
         if (!pdfJS.GlobalWorkerOptions.workerSrc) {
@@ -198,12 +201,12 @@ export default function PDFViewer() {
         const arrayBuffer = await pdfFile.arrayBuffer();
 
         // Load the PDF document from ArrayBuffer
-        const loadingTask = pdfJS.getDocument({ data: arrayBuffer });
+        const loadingTask = getDocument({ data: arrayBuffer });
         const pdf = await loadingTask.promise;
 
         if (!isCancelled) {
           console.log(`Uploaded PDF loaded successfully with ${pdf.numPages} pages`);
-          setPdfDoc(pdf);
+          setPdfDoc(pdf as PDFDocumentProxy);
           setNumPages(pdf.numPages);
           setError(null);
 
@@ -214,7 +217,7 @@ export default function PDFViewer() {
             }
           }, 100);
         }
-      } catch (error) {
+      } catch (error: any) {
         if (!isCancelled) {
           console.error('PDF loading error:', error);
           setError(error.message || 'Failed to load PDF');
@@ -238,6 +241,9 @@ export default function PDFViewer() {
       if (!pdfDoc) return;
 
       try {
+        // Set page rendering state to true at the start
+        setIsPageRendering(true);
+
         // Only show loading on initial load, not on page changes
         if (!canvasRef.current || !canvasRef.current.getContext('2d').getImageData(0, 0, 1, 1)) {
           setIsLoading(true);
@@ -270,7 +276,7 @@ export default function PDFViewer() {
         if (renderTaskRef.current) {
           try {
             await renderTaskRef.current.promise;
-          } catch (err) {
+          } catch (err: any) {
             // Ignore cancellation errors
             if (err && err.name !== 'RenderingCancelledException') {
               throw err;
@@ -292,12 +298,15 @@ export default function PDFViewer() {
 
         if (!isCancelled) {
           setIsLoading(false);
+          // Set page rendering state to false when complete
+          setIsPageRendering(false);
         }
-      } catch (error) {
+      } catch (error: any) {
         if (!isCancelled) {
           console.error('PDF rendering error:', error);
           setError(error.message || 'Failed to render PDF');
           setIsLoading(false);
+          setIsPageRendering(false); // Make sure to reset the rendering state on error
         }
       }
     }
@@ -421,7 +430,7 @@ export default function PDFViewer() {
           <div className="loading-overlay absolute inset-0 bg-white bg-opacity-80 flex items-center justify-center z-10">
             <div className="loading-spinner w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
           </div>
-        ) : renderTaskRef.current && pageNum !== renderTaskRef.current.pageNumber && (
+        ) : isPageRendering && (
           <div className="page-transition-indicator absolute bottom-2 right-2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-70">
             Loading page {pageNum}...
           </div>
