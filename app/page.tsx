@@ -59,36 +59,29 @@ export default function PDFViewer() {
   const [currentNote, setCurrentNote] = useState('');
   const MAX_NOTE_LENGTH = 10000; // Increased character limit for formatted notes
 
-  // Default notes template for new documents
-  const getDefaultNotes = (totalPages: number): DocumentNotes => {
-    const defaultPages: PageNote[] = [];
+  // Create empty notes document structure (with option for single page or page range)
+  const getEmptyNotes = (totalPages: number, specificPage?: number): DocumentNotes => {
+    const emptyPages: PageNote[] = [];
 
-    // First page has special template
-    defaultPages.push({
-      number: 1,
-      text: "Title of Document\n------------------\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do \neiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim\nad minim veniam, quis nostrud exercitation ullamco laboris nisi ut\naliquip ex ea commodo consequat.\n\n This paragraph is indented with 4 spaces at the beginning.\n It maintains the indentation throughout multiple lines\n to preserve the original formatting structure.\n\nTABLE EXAMPLE:\nItem      Quantity Price\n-------- -------- -------\nProduct A    5     $10.99\nProduct B    2     $24.50\nProduct C    10    $3.75\n\n• Bullet point item one\n• Bullet point item two\n • Sub-bullet with additional indentation\n• Bullet point item three\n\nSection with irregular spacing that preserves\nthe original layout of the text.\n\nFOOTER\n------\nPage 1 of " + totalPages + " Reference: DOC-2023-001",
-    });
-
-    // Generate basic templates for other pages
-    for (let i = 2; i <= totalPages; i++) {
-      defaultPages.push({
-        number: i,
-        text: "Page " + i + " Notes\n" +
-          "-------------\n\n" +
-          "This is the default note template for page " + i + ".\n" +
-          "You can edit this text to add your own notes.\n\n" +
-          "• Add key points\n" +
-          "• Document observations\n" +
-          "• Include references\n\n" +
-          "FOOTER\n" +
-          "------\n" +
-          "Page " + i + " of " + totalPages + " Reference: DOC-2023-001"
+    if (specificPage) {
+      // Just create a structure for a specific page
+      emptyPages.push({
+        number: specificPage,
+        text: "",
       });
+    } else {
+      // Create empty notes for specified number of pages
+      for (let i = 1; i <= totalPages; i++) {
+        emptyPages.push({
+          number: i,
+          text: "",
+        });
+      }
     }
 
     return {
       document: {
-        pages: defaultPages,
+        pages: emptyPages,
         metadata: {
           total_pages: totalPages
         }
@@ -96,24 +89,7 @@ export default function PDFViewer() {
     };
   };
 
-  // Parse the current note's text content from the structured format
-  const parseNoteText = (jsonStr: string): string => {
-    try {
-      const noteObj = JSON.parse(jsonStr);
-      if (noteObj && noteObj.document && noteObj.document.pages) {
-        // Find the page note that matches the current page
-        const pageNote = noteObj.document.pages.find(
-          (p: PageNote) => p.number === pageNum
-        );
-        if (pageNote && pageNote.text) {
-          return pageNote.text;
-        }
-      }
-    } catch (err) {
-      console.warn('Error parsing note JSON, treating as plain text:', err);
-    }
-    return jsonStr; // If parsing fails, return original string
-  };
+  // This function is no longer needed since we handle parsing in the effect directly
 
   // Create or update the JSON structure when text changes
   const updateNoteJson = (newText: string): string => {
@@ -125,12 +101,12 @@ export default function PDFViewer() {
         try {
           noteObj = JSON.parse(notes[pageNum]);
         } catch (err) {
-          // If current note isn't valid JSON, create new structure
-          noteObj = getDefaultNotes(numPages || 1);
+          // If current note isn't valid JSON, create new empty structure
+          noteObj = getEmptyNotes(numPages || 1);
         }
       } else {
-        // Create new structure if no existing note
-        noteObj = getDefaultNotes(numPages || 1);
+        // Create new empty structure if no existing note
+        noteObj = getEmptyNotes(numPages || 1);
       }
 
       // Find the page to update
@@ -163,21 +139,23 @@ export default function PDFViewer() {
     }
   };
 
-  // Initialize notes when PDF loads and page count is available
+  // Initialize notes structure when PDF loads and page count is available
   useEffect(() => {
     if (numPages && numPages > 0 && Object.keys(notes).length === 0) {
-      // Create default notes for all pages
-      const defaultNotesObj = getDefaultNotes(numPages);
-      const defaultNoteJson = JSON.stringify(defaultNotesObj);
+      // Create empty notes structure
+      // We'll only create the structure for the first page initially
+      // and create other pages on demand to avoid large JSON structures for big PDFs
+      const emptyNotesObj = getEmptyNotes(1);
+      const emptyNoteJson = JSON.stringify(emptyNotesObj);
 
-      // Set first page as current
-      setCurrentNote(defaultNotesObj.document.pages[0].text);
+      // Set first page as current (empty text)
+      setCurrentNote("");
 
-      // Set the note for page 1
-      setNotes({ 1: defaultNoteJson });
+      // Set the empty note structure
+      setNotes({ 1: emptyNoteJson });
 
       // Save to session storage
-      sessionStorage.setItem('pdfNotes', JSON.stringify({ 1: defaultNoteJson }));
+      sessionStorage.setItem('pdfNotes', JSON.stringify({ 1: emptyNoteJson }));
     }
   }, [numPages]);
 
@@ -196,19 +174,35 @@ export default function PDFViewer() {
   // Effect to update current note when page changes
   useEffect(() => {
     if (notes[pageNum]) {
-      setCurrentNote(parseNoteText(notes[pageNum]));
+      try {
+        // Attempt to parse the JSON structure to extract just the text
+        const noteObj = JSON.parse(notes[pageNum]);
+        if (noteObj && noteObj.document && noteObj.document.pages) {
+          // Find the page note that matches the current page
+          const pageNote = noteObj.document.pages.find(p => p.number === pageNum);
+          if (pageNote) {
+            // Set just the text content, not the whole JSON
+            setCurrentNote(pageNote.text);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Error parsing note JSON:', err);
+      }
+
+      // Fallback if there's an issue with parsing
+      setCurrentNote(notes[pageNum]);
     } else if (numPages && numPages > 0) {
-      // If no note exists for this page but we have default notes,
-      // create a default note for this page
-      const defaultNotesObj = getDefaultNotes(numPages);
-      const pageNote = defaultNotesObj.document.pages.find(p => p.number === pageNum);
+      // If no note exists for this page yet, create an empty note just for this page
+      const emptyNotesObj = getEmptyNotes(numPages || 1, pageNum);
+      const pageNote = emptyNotesObj.document.pages[0]; // We know this is the page we want
 
       if (pageNote) {
-        const noteText = pageNote.text;
-        setCurrentNote(noteText);
+        // Start with empty text
+        setCurrentNote("");
 
-        // Update notes storage with this new page
-        const updatedJson = updateNoteJson(noteText);
+        // Update notes storage with this new page (empty)
+        const updatedJson = updateNoteJson("");
         setNotes(prevNotes => ({
           ...prevNotes,
           [pageNum]: updatedJson
@@ -373,7 +367,7 @@ export default function PDFViewer() {
       setCurrentNote('');
       // Clear notes from session storage
       sessionStorage.removeItem('pdfNotes');
-      // We'll recreate default notes when numPages is updated
+      // We'll create empty notes structure when numPages is updated
       // Important: Clear the current PDF doc to avoid conflict
       setPdfDoc(null);
     } else if (files && files[0]) {
