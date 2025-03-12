@@ -2,7 +2,33 @@
 import { useEffect, useRef, useState, MouseEvent, useCallback } from 'react';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist/types/src/display/api';
 
-// Type definition for notes
+// Type definitions for structured notes
+interface PageNote {
+  number: number;
+  text: string;
+  layout?: {
+    blocks: Array<{
+      type: string;
+      text: string;
+      bbox?: {
+        x0: number;
+        y0: number;
+        x1: number;
+        y1: number;
+      }
+    }>
+  }
+}
+
+interface DocumentNotes {
+  document: {
+    pages: PageNote[];
+    metadata: {
+      total_pages: number;
+    }
+  }
+}
+
 interface PageNotes {
   [pageNumber: number]: string;
 }
@@ -31,7 +57,129 @@ export default function PDFViewer() {
   // Notes related state
   const [notes, setNotes] = useState<PageNotes>({});
   const [currentNote, setCurrentNote] = useState('');
-  const MAX_NOTE_LENGTH = 5000; // Set a reasonable character limit for notes
+  const MAX_NOTE_LENGTH = 10000; // Increased character limit for formatted notes
+
+  // Default notes template for new documents
+  const getDefaultNotes = (totalPages: number): DocumentNotes => {
+    const defaultPages: PageNote[] = [];
+
+    // First page has special template
+    defaultPages.push({
+      number: 1,
+      text: "Title of Document\n------------------\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do \neiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim\nad minim veniam, quis nostrud exercitation ullamco laboris nisi ut\naliquip ex ea commodo consequat.\n\n This paragraph is indented with 4 spaces at the beginning.\n It maintains the indentation throughout multiple lines\n to preserve the original formatting structure.\n\nTABLE EXAMPLE:\nItem      Quantity Price\n-------- -------- -------\nProduct A    5     $10.99\nProduct B    2     $24.50\nProduct C    10    $3.75\n\n• Bullet point item one\n• Bullet point item two\n • Sub-bullet with additional indentation\n• Bullet point item three\n\nSection with irregular spacing that preserves\nthe original layout of the text.\n\nFOOTER\n------\nPage 1 of " + totalPages + " Reference: DOC-2023-001",
+    });
+
+    // Generate basic templates for other pages
+    for (let i = 2; i <= totalPages; i++) {
+      defaultPages.push({
+        number: i,
+        text: "Page " + i + " Notes\n" +
+          "-------------\n\n" +
+          "This is the default note template for page " + i + ".\n" +
+          "You can edit this text to add your own notes.\n\n" +
+          "• Add key points\n" +
+          "• Document observations\n" +
+          "• Include references\n\n" +
+          "FOOTER\n" +
+          "------\n" +
+          "Page " + i + " of " + totalPages + " Reference: DOC-2023-001"
+      });
+    }
+
+    return {
+      document: {
+        pages: defaultPages,
+        metadata: {
+          total_pages: totalPages
+        }
+      }
+    };
+  };
+
+  // Parse the current note's text content from the structured format
+  const parseNoteText = (jsonStr: string): string => {
+    try {
+      const noteObj = JSON.parse(jsonStr);
+      if (noteObj && noteObj.document && noteObj.document.pages) {
+        // Find the page note that matches the current page
+        const pageNote = noteObj.document.pages.find(
+          (p: PageNote) => p.number === pageNum
+        );
+        if (pageNote && pageNote.text) {
+          return pageNote.text;
+        }
+      }
+    } catch (err) {
+      console.warn('Error parsing note JSON, treating as plain text:', err);
+    }
+    return jsonStr; // If parsing fails, return original string
+  };
+
+  // Create or update the JSON structure when text changes
+  const updateNoteJson = (newText: string): string => {
+    try {
+      let noteObj: DocumentNotes;
+
+      // Try to parse existing note as JSON
+      if (notes[pageNum]) {
+        try {
+          noteObj = JSON.parse(notes[pageNum]);
+        } catch (err) {
+          // If current note isn't valid JSON, create new structure
+          noteObj = getDefaultNotes(numPages || 1);
+        }
+      } else {
+        // Create new structure if no existing note
+        noteObj = getDefaultNotes(numPages || 1);
+      }
+
+      // Find the page to update
+      const pageIndex = noteObj.document.pages.findIndex(
+        p => p.number === pageNum
+      );
+
+      if (pageIndex >= 0) {
+        // Update existing page
+        noteObj.document.pages[pageIndex].text = newText;
+      } else {
+        // Add new page
+        noteObj.document.pages.push({
+          number: pageNum,
+          text: newText
+        });
+      }
+
+      // Update total pages if needed
+      noteObj.document.metadata.total_pages = Math.max(
+        noteObj.document.metadata.total_pages,
+        numPages || 1
+      );
+
+      return JSON.stringify(noteObj);
+    } catch (err) {
+      console.error('Error updating note JSON:', err);
+      // Fallback to just storing the text
+      return newText;
+    }
+  };
+
+  // Initialize notes when PDF loads and page count is available
+  useEffect(() => {
+    if (numPages && numPages > 0 && Object.keys(notes).length === 0) {
+      // Create default notes for all pages
+      const defaultNotesObj = getDefaultNotes(numPages);
+      const defaultNoteJson = JSON.stringify(defaultNotesObj);
+
+      // Set first page as current
+      setCurrentNote(defaultNotesObj.document.pages[0].text);
+
+      // Set the note for page 1
+      setNotes({ 1: defaultNoteJson });
+
+      // Save to session storage
+      sessionStorage.setItem('pdfNotes', JSON.stringify({ 1: defaultNoteJson }));
+    }
+  }, [numPages]);
 
   // Effect to load notes from session storage when component mounts
   useEffect(() => {
@@ -48,11 +196,30 @@ export default function PDFViewer() {
   // Effect to update current note when page changes
   useEffect(() => {
     if (notes[pageNum]) {
-      setCurrentNote(notes[pageNum]);
+      setCurrentNote(parseNoteText(notes[pageNum]));
+    } else if (numPages && numPages > 0) {
+      // If no note exists for this page but we have default notes,
+      // create a default note for this page
+      const defaultNotesObj = getDefaultNotes(numPages);
+      const pageNote = defaultNotesObj.document.pages.find(p => p.number === pageNum);
+
+      if (pageNote) {
+        const noteText = pageNote.text;
+        setCurrentNote(noteText);
+
+        // Update notes storage with this new page
+        const updatedJson = updateNoteJson(noteText);
+        setNotes(prevNotes => ({
+          ...prevNotes,
+          [pageNum]: updatedJson
+        }));
+      } else {
+        setCurrentNote('');
+      }
     } else {
       setCurrentNote('');
     }
-  }, [pageNum, notes]);
+  }, [pageNum, notes, numPages]);
 
   // Save notes to session storage whenever they change
   useEffect(() => {
@@ -65,9 +232,12 @@ export default function PDFViewer() {
     // Enforce character limit
     if (newText.length <= MAX_NOTE_LENGTH) {
       setCurrentNote(newText);
+
+      // Update JSON structure and store
+      const updatedJson = updateNoteJson(newText);
       setNotes(prevNotes => ({
         ...prevNotes,
-        [pageNum]: newText
+        [pageNum]: updatedJson
       }));
     }
   };
@@ -203,6 +373,7 @@ export default function PDFViewer() {
       setCurrentNote('');
       // Clear notes from session storage
       sessionStorage.removeItem('pdfNotes');
+      // We'll recreate default notes when numPages is updated
       // Important: Clear the current PDF doc to avoid conflict
       setPdfDoc(null);
     } else if (files && files[0]) {
@@ -574,11 +745,18 @@ export default function PDFViewer() {
             value={currentNote}
             onChange={handleNoteChange}
             placeholder="Add your notes for this page here..."
-            className="w-full h-full min-h-[400px] p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full h-full min-h-[400px] p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
             maxLength={MAX_NOTE_LENGTH}
+            style={{
+              whiteSpace: 'pre-wrap',
+              lineHeight: '1.5',
+              fontSize: '14px',
+              fontFamily: 'Consolas, Monaco, "Courier New", monospace'
+            }}
           />
           <div className="mt-2 text-sm text-gray-500">
-            Notes are saved per page and will persist during this browser session.
+            <div>Notes are saved per page and will persist during this browser session.</div>
+            <div className="mt-1">Formatting: Line breaks and spacing will be preserved as shown.</div>
           </div>
         </div>
       </div>
