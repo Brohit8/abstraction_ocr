@@ -92,7 +92,7 @@ export default function PDFViewer() {
   // This function is no longer needed since we handle parsing in the effect directly
 
   // Create or update the JSON structure when text changes
-  const updateNoteJson = (newText: string): string => {
+  const updateNoteJson = useCallback((newText: string): string => {
     try {
       let noteObj: DocumentNotes;
 
@@ -100,7 +100,7 @@ export default function PDFViewer() {
       if (notes[pageNum]) {
         try {
           noteObj = JSON.parse(notes[pageNum]);
-        } catch (err) {
+        } catch (error) {
           // If current note isn't valid JSON, create new empty structure
           noteObj = getEmptyNotes(numPages || 1);
         }
@@ -132,12 +132,12 @@ export default function PDFViewer() {
       );
 
       return JSON.stringify(noteObj);
-    } catch (err) {
-      console.error('Error updating note JSON:', err);
+    } catch (error) {
+      console.error('Error updating note JSON:', error);
       // Fallback to just storing the text
       return newText;
     }
-  };
+  }, [notes, pageNum, numPages]);
 
   // Initialize notes structure when PDF loads and page count is available
   useEffect(() => {
@@ -157,7 +157,7 @@ export default function PDFViewer() {
       // Save to session storage
       sessionStorage.setItem('pdfNotes', JSON.stringify({ 1: emptyNoteJson }));
     }
-  }, [numPages]);
+  }, [numPages, notes]);
 
   // Effect to load notes from session storage when component mounts
   useEffect(() => {
@@ -186,8 +186,8 @@ export default function PDFViewer() {
             return;
           }
         }
-      } catch (err) {
-        console.warn('Error parsing note JSON:', err);
+      } catch (error) {
+        console.warn('Error parsing note JSON:', error);
       }
 
       // Fallback if there's an issue with parsing
