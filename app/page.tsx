@@ -166,8 +166,8 @@ export default function PDFViewer() {
     if (savedNotes) {
       try {
         setNotes(JSON.parse(savedNotes));
-      } catch (err) {
-        console.error('Error parsing saved notes:', err);
+      } catch {
+        console.error('Error parsing saved notes');
       }
     }
   }, []);
