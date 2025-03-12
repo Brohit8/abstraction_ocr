@@ -92,6 +92,7 @@ export default function PDFViewer() {
   // This function is no longer needed since we handle parsing in the effect directly
 
   // Create or update the JSON structure when text changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const updateNoteJson = useCallback((newText: string): string => {
     try {
       let noteObj: DocumentNotes;
@@ -100,7 +101,7 @@ export default function PDFViewer() {
       if (notes[pageNum]) {
         try {
           noteObj = JSON.parse(notes[pageNum]);
-        } catch (error) {
+        } catch {
           // If current note isn't valid JSON, create new empty structure
           noteObj = getEmptyNotes(numPages || 1);
         }
@@ -132,8 +133,8 @@ export default function PDFViewer() {
       );
 
       return JSON.stringify(noteObj);
-    } catch (error) {
-      console.error('Error updating note JSON:', error);
+    } catch {
+      console.error('Error updating note JSON');
       // Fallback to just storing the text
       return newText;
     }
