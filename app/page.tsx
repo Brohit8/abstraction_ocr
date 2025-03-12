@@ -198,6 +198,11 @@ export default function PDFViewer() {
       setError(null);
       setPdfLoadSource('file'); // Set source to file
       setIsEditingPage(false); // Close page editor if it's open
+      // Clear all notes when a new PDF is uploaded
+      setNotes({});
+      setCurrentNote('');
+      // Clear notes from session storage
+      sessionStorage.removeItem('pdfNotes');
       // Important: Clear the current PDF doc to avoid conflict
       setPdfDoc(null);
     } else if (files && files[0]) {
