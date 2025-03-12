@@ -19,7 +19,7 @@ export default function PDFViewer() {
   const [fileName, setFileName] = useState('No file selected');
 
   const goToNextPage = () => {
-    if (pageNum < numPages) {
+    if (pageNum < (numPages || 1)) {
       console.log(`Moving to next page: ${pageNum + 1}`);
       setPageNum(prevPageNum => prevPageNum + 1);
     }
@@ -272,7 +272,7 @@ export default function PDFViewer() {
             await renderTaskRef.current.promise;
           } catch (err) {
             // Ignore cancellation errors
-            if (err.name !== 'RenderingCancelledException') {
+            if (err && err.name !== 'RenderingCancelledException') {
               throw err;
             }
           }
@@ -365,7 +365,7 @@ export default function PDFViewer() {
           </span>
           <button
             onClick={goToNextPage}
-            disabled={isLoading || pageNum >= numPages}
+            disabled={isLoading || pageNum >= (numPages || 1)}
             className="px-3 py-1 bg-blue-500 text-white rounded disabled:bg-gray-300"
             aria-label="Next page"
           >
@@ -421,7 +421,7 @@ export default function PDFViewer() {
           <div className="loading-overlay absolute inset-0 bg-white bg-opacity-80 flex items-center justify-center z-10">
             <div className="loading-spinner w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
           </div>
-        ) : pageNum !== renderTaskRef.current?.pageNumber && (
+        ) : renderTaskRef.current && pageNum !== renderTaskRef.current.pageNumber && (
           <div className="page-transition-indicator absolute bottom-2 right-2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-70">
             Loading page {pageNum}...
           </div>
