@@ -2,6 +2,11 @@
 import { useEffect, useRef, useState, MouseEvent, useCallback } from 'react';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist/types/src/display/api';
 
+// Type definition for notes
+interface PageNotes {
+  [pageNumber: number]: string;
+}
+
 export default function PDFViewer() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -22,6 +27,50 @@ export default function PDFViewer() {
   const [pdfLoadSource, setPdfLoadSource] = useState<'default' | 'file' | null>(null);
   const [isEditingPage, setIsEditingPage] = useState(false);
   const [pageInputValue, setPageInputValue] = useState('');
+
+  // Notes related state
+  const [notes, setNotes] = useState<PageNotes>({});
+  const [currentNote, setCurrentNote] = useState('');
+  const MAX_NOTE_LENGTH = 5000; // Set a reasonable character limit for notes
+
+  // Effect to load notes from session storage when component mounts
+  useEffect(() => {
+    const savedNotes = sessionStorage.getItem('pdfNotes');
+    if (savedNotes) {
+      try {
+        setNotes(JSON.parse(savedNotes));
+      } catch (err) {
+        console.error('Error parsing saved notes:', err);
+      }
+    }
+  }, []);
+
+  // Effect to update current note when page changes
+  useEffect(() => {
+    if (notes[pageNum]) {
+      setCurrentNote(notes[pageNum]);
+    } else {
+      setCurrentNote('');
+    }
+  }, [pageNum, notes]);
+
+  // Save notes to session storage whenever they change
+  useEffect(() => {
+    sessionStorage.setItem('pdfNotes', JSON.stringify(notes));
+  }, [notes]);
+
+  // Handle note changes
+  const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newText = e.target.value;
+    // Enforce character limit
+    if (newText.length <= MAX_NOTE_LENGTH) {
+      setCurrentNote(newText);
+      setNotes(prevNotes => ({
+        ...prevNotes,
+        [pageNum]: newText
+      }));
+    }
+  };
 
   const goToNextPage = () => {
     if (pageNum < (numPages || 1)) {
@@ -346,7 +395,7 @@ export default function PDFViewer() {
   }, [pdfDoc, pageNum, scale]);
 
   return (
-    <div className="pdf-container max-w-4xl mx-auto p-4">
+    <div className="pdf-container mx-auto p-4 w-full">
       {error && (
         <div className="error-message bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           Error: {error}
@@ -458,49 +507,75 @@ export default function PDFViewer() {
         </div>
       </div>
 
-      <div
-        ref={containerRef}
-        className="pdf-viewer relative border border-gray-300 rounded-lg overflow-auto"
-        style={{
-          height: '842px',  // Height of US Letter in points
-          width: '100%',
-          maxWidth: '612px', // Width of US Letter in points
-          margin: '0 auto',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-        }}
-      >
-        {isLoading ? (
-          <div className="loading-overlay absolute inset-0 bg-white bg-opacity-80 flex items-center justify-center z-10">
-            <div className="loading-spinner w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-        ) : isPageRendering && (
-          <div className="page-transition-indicator absolute bottom-2 right-2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-70">
-            Loading page {pageNum}...
-          </div>
-        )}
-
+      {/* Main content area with responsive design */}
+      <div className="flex flex-col lg:flex-row gap-4">
+        {/* PDF Viewer */}
         <div
-          className="pdf-content"
+          ref={containerRef}
+          className="pdf-viewer relative border border-gray-300 rounded-lg overflow-auto lg:w-2/3"
           style={{
-            transform: `translate(${panPosition.x}px, ${panPosition.y}px)`,
-            transition: isPanning ? 'none' : 'transform 0.1s ease-out',
-            cursor: isPanning ? 'grabbing' : (scale > 1 ? 'grab' : 'default'),
+            height: '842px',  // Height of US Letter in points
+            width: '100%',
+            maxWidth: '100%', // Changed from fixed width to be responsive
+            margin: '0 auto',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
           }}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseLeave}
         >
-          <canvas ref={canvasRef} />
+          {isLoading ? (
+            <div className="loading-overlay absolute inset-0 bg-white bg-opacity-80 flex items-center justify-center z-10">
+              <div className="loading-spinner w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          ) : isPageRendering && (
+            <div className="page-transition-indicator absolute bottom-2 right-2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-70">
+              Loading page {pageNum}...
+            </div>
+          )}
+
+          <div
+            className="pdf-content"
+            style={{
+              transform: `translate(${panPosition.x}px, ${panPosition.y}px)`,
+              transition: isPanning ? 'none' : 'transform 0.1s ease-out',
+              cursor: isPanning ? 'grabbing' : (scale > 1 ? 'grab' : 'default'),
+            }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseLeave}
+          >
+            <canvas ref={canvasRef} />
+          </div>
+
+          {scale > 1 && !isLoading && (
+            <div className="panning-instructions absolute top-2 left-2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-70 pointer-events-none">
+              Click and drag to pan
+            </div>
+          )}
         </div>
 
-        {scale > 1 && !isLoading && (
-          <div className="panning-instructions absolute top-2 left-2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-70 pointer-events-none">
-            Click and drag to pan
+        {/* Notes Section */}
+        <div className="notes-section lg:w-1/3 flex flex-col">
+          <div className="bg-gray-100 p-3 rounded-lg mb-2">
+            <h2 className="text-lg font-medium flex items-center justify-between">
+              <span>Notes for Page {pageNum}</span>
+              <span className="text-xs text-gray-500">
+                {currentNote.length}/{MAX_NOTE_LENGTH} characters
+              </span>
+            </h2>
           </div>
-        )}
+          <textarea
+            value={currentNote}
+            onChange={handleNoteChange}
+            placeholder="Add your notes for this page here..."
+            className="w-full h-full min-h-[400px] p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            maxLength={MAX_NOTE_LENGTH}
+          />
+          <div className="mt-2 text-sm text-gray-500">
+            Notes are saved per page and will persist during this browser session.
+          </div>
+        </div>
       </div>
     </div>
   );
