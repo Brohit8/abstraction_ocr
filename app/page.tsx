@@ -19,6 +19,7 @@ export default function PDFViewer() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState('No file selected');
   const [isPageRendering, setIsPageRendering] = useState(false);
+  const [pdfLoadSource, setPdfLoadSource] = useState<'default' | 'file' | null>(null);
 
   const goToNextPage = () => {
     if (pageNum < (numPages || 1)) {
@@ -106,6 +107,9 @@ export default function PDFViewer() {
       setPageNum(1); // Reset to first page
       setPanPosition({ x: 0, y: 0 }); // Reset panning
       setError(null);
+      setPdfLoadSource('file'); // Set source to file
+      // Important: Clear the current PDF doc to avoid conflict
+      setPdfDoc(null);
     } else if (files && files[0]) {
       setError('Please select a valid PDF file');
     }
@@ -117,100 +121,50 @@ export default function PDFViewer() {
     }
   };
 
-  // Load the PDF document
+  // Unified PDF loading effect with source tracking
   useEffect(() => {
     let isCancelled = false;
 
     async function loadPDF() {
-      // If no file selected and no PDF is loaded, use example.pdf
-      if (!pdfFile && !pdfDoc) {
-        try {
-          setIsLoading(true);
-          console.log('Loading default PDF document...');
-
-          // Import pdfjs-dist dynamically for client-side rendering
-          const pdfJS = await import('pdfjs-dist');
-          const { getDocument } = pdfJS;
-
-          // Set up the worker
-          const workerSrc = new URL(
-            'pdfjs-dist/build/pdf.worker.min.mjs',
-            import.meta.url
-          ).toString();
-
-          pdfJS.GlobalWorkerOptions.workerSrc = workerSrc;
-
-          // Load the default PDF document
-          const loadingTask = getDocument('example.pdf');
-          const pdf = await loadingTask.promise;
-
-          if (!isCancelled) {
-            console.log(`Default PDF loaded successfully with ${pdf.numPages} pages`);
-            setPdfDoc(pdf as PDFDocumentProxy);
-            setNumPages(pdf.numPages);
-            setFileName('example.pdf');
-            setError(null);
-
-            // Calculate initial scale to fit page
-            setTimeout(() => {
-              if (!isCancelled) {
-                fitToPage();
-              }
-            }, 100);
-          }
-        } catch (error) {
-          if (!isCancelled) {
-            console.error('PDF loading error:', error);
-            setError(
-              error instanceof Error ? error.message : 'Failed to load PDF'
-            );
-            setIsLoading(false);
-          }
-        }
+      // Skip if we're already loading or if we have the correct document loaded
+      if ((pdfDoc && pdfLoadSource) || isPageRendering) {
+        return;
       }
-    }
-
-    loadPDF();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [pdfFile, pdfDoc, fitToPage]);
-
-  // Handle uploaded PDF file
-  useEffect(() => {
-    let isCancelled = false;
-
-    async function loadUploadedPDF() {
-      if (!pdfFile) return;
 
       try {
         setIsLoading(true);
-        console.log('Loading uploaded PDF document...');
-
         // Import pdfjs-dist dynamically for client-side rendering
         const pdfJS = await import('pdfjs-dist');
         const { getDocument } = pdfJS;
 
-        // Set up the worker if not already set
+        // Set up the worker
         if (!pdfJS.GlobalWorkerOptions.workerSrc) {
           const workerSrc = new URL(
             'pdfjs-dist/build/pdf.worker.min.mjs',
             import.meta.url
           ).toString();
-
           pdfJS.GlobalWorkerOptions.workerSrc = workerSrc;
         }
 
-        // Convert the file to ArrayBuffer
-        const arrayBuffer = await pdfFile.arrayBuffer();
+        let loadingTask;
 
-        // Load the PDF document from ArrayBuffer
-        const loadingTask = getDocument({ data: arrayBuffer });
+        // Load from file if available, otherwise load default
+        if (pdfFile) {
+          console.log('Loading PDF from uploaded file...');
+          const arrayBuffer = await pdfFile.arrayBuffer();
+          loadingTask = getDocument({ data: arrayBuffer });
+          setPdfLoadSource('file');
+        } else {
+          console.log('Loading default PDF document...');
+          loadingTask = getDocument('example.pdf');
+          setPdfLoadSource('default');
+          setFileName('example.pdf');
+        }
+
         const pdf = await loadingTask.promise;
 
         if (!isCancelled) {
-          console.log(`Uploaded PDF loaded successfully with ${pdf.numPages} pages`);
+          console.log(`PDF loaded successfully with ${pdf.numPages} pages`);
           setPdfDoc(pdf as PDFDocumentProxy);
           setNumPages(pdf.numPages);
           setError(null);
@@ -233,12 +187,12 @@ export default function PDFViewer() {
       }
     }
 
-    loadUploadedPDF();
+    loadPDF();
 
     return () => {
       isCancelled = true;
     };
-  }, [pdfFile, fitToPage]);
+  }, [pdfFile, pdfDoc, pdfLoadSource, fitToPage, isPageRendering]);
 
   // Render the current page whenever page number or scale changes
   useEffect(() => {
