@@ -186,8 +186,8 @@ export default function PDFViewer() {
             return;
           }
         }
-      } catch (error) {
-        console.warn('Error parsing note JSON:', error);
+      } catch {
+        // Silently handle parsing errors and fall through to the fallback
       }
 
       // Fallback if there's an issue with parsing
