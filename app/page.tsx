@@ -20,6 +20,8 @@ export default function PDFViewer() {
   const [fileName, setFileName] = useState('No file selected');
   const [isPageRendering, setIsPageRendering] = useState(false);
   const [pdfLoadSource, setPdfLoadSource] = useState<'default' | 'file' | null>(null);
+  const [isEditingPage, setIsEditingPage] = useState(false);
+  const [pageInputValue, setPageInputValue] = useState('');
 
   const goToNextPage = () => {
     if (pageNum < (numPages || 1)) {
@@ -33,6 +35,44 @@ export default function PDFViewer() {
       console.log(`Moving to previous page: ${pageNum - 1}`);
       setPageNum(prevPageNum => prevPageNum - 1);
     }
+  };
+
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= (numPages || 1)) {
+      console.log(`Going to page: ${page}`);
+      setPageNum(page);
+    }
+  };
+
+  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Only allow numeric input
+    const value = e.target.value.replace(/[^0-9]/g, '');
+    setPageInputValue(value);
+  };
+
+  const handlePageInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      submitPageChange();
+    } else if (e.key === 'Escape') {
+      cancelPageEdit();
+    }
+  };
+
+  const submitPageChange = () => {
+    const newPage = parseInt(pageInputValue);
+    if (!isNaN(newPage)) {
+      goToPage(newPage);
+    }
+    setIsEditingPage(false);
+  };
+
+  const cancelPageEdit = () => {
+    setIsEditingPage(false);
+  };
+
+  const startPageEdit = () => {
+    setPageInputValue(pageNum.toString());
+    setIsEditingPage(true);
   };
 
   // Simple zoom functions
@@ -108,6 +148,7 @@ export default function PDFViewer() {
       setPanPosition({ x: 0, y: 0 }); // Reset panning
       setError(null);
       setPdfLoadSource('file'); // Set source to file
+      setIsEditingPage(false); // Close page editor if it's open
       // Important: Clear the current PDF doc to avoid conflict
       setPdfDoc(null);
     } else if (files && files[0]) {
@@ -193,6 +234,21 @@ export default function PDFViewer() {
       isCancelled = true;
     };
   }, [pdfFile, pdfDoc, pdfLoadSource, fitToPage, isPageRendering]);
+
+  // Auto-focus the page input when editing
+  useEffect(() => {
+    if (isEditingPage) {
+      // Add a small delay to ensure the input is rendered
+      const timer = setTimeout(() => {
+        const input = document.querySelector('input[aria-label="Enter page number"]') as HTMLInputElement;
+        if (input) {
+          input.focus();
+          input.select();
+        }
+      }, 10);
+      return () => clearTimeout(timer);
+    }
+  }, [isEditingPage]);
 
   // Render the current page whenever page number or scale changes
   useEffect(() => {
@@ -336,9 +392,31 @@ export default function PDFViewer() {
           >
             &lt; Prev
           </button>
-          <span className="px-2 py-1 bg-gray-700 text-white font-medium rounded">
-            Page {pageNum} of {numPages || '?'}
-          </span>
+          <div className="px-2 py-1 bg-gray-700 text-white font-medium rounded flex items-center">
+            <span className="mr-1">Page</span>
+            {isEditingPage ? (
+              <input
+                type="text"
+                value={pageInputValue}
+                onChange={handlePageInputChange}
+                onKeyDown={handlePageInputKeyDown}
+                onBlur={submitPageChange}
+                autoFocus
+                className="w-10 px-1 py-0 bg-gray-600 text-white text-center rounded mx-1"
+                aria-label="Enter page number"
+              />
+            ) : (
+              <button
+                onClick={startPageEdit}
+                className="w-10 mx-1 px-1 py-0 bg-gray-600 text-white text-center rounded hover:bg-gray-500 transition-colors"
+                aria-label="Click to edit page number"
+                title="Click to edit page number"
+              >
+                {pageNum}
+              </button>
+            )}
+            <span>of {numPages || '?'}</span>
+          </div>
           <button
             onClick={goToNextPage}
             disabled={isLoading || pageNum >= (numPages || 1)}
