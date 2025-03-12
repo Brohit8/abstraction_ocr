@@ -54,7 +54,7 @@ export default function PDFViewer() {
   const [pdfLoadSource, setPdfLoadSource] = useState<'default' | 'file' | null>(null);
   const [isEditingPage, setIsEditingPage] = useState(false);
   const [pageInputValue, setPageInputValue] = useState('');
-  const [windowWidth, setWindowWidth] = useState(0);
+  // We'll only use isCompactView state without tracking width directly
   const [isCompactView, setIsCompactView] = useState(false);
 
   // Notes related state
@@ -67,7 +67,7 @@ export default function PDFViewer() {
     if (typeof window === 'undefined') return;
 
     const handleResize = () => {
-      setWindowWidth(window.innerWidth);
+      // Directly update compact view state based on window width
       setIsCompactView(window.innerWidth < 640); // sm breakpoint
     };
 
@@ -156,6 +156,7 @@ export default function PDFViewer() {
       // Fallback to just storing the text
       return newText;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notes, pageNum, numPages]);
 
   // Initialize notes structure when PDF loads and page count is available
@@ -190,7 +191,6 @@ export default function PDFViewer() {
     }
   }, []);
 
-  /* eslint-disable react-hooks/exhaustive-deps */
   // Effect to update current note when page changes
   useEffect(() => {
     if (notes[pageNum]) {
@@ -235,8 +235,8 @@ export default function PDFViewer() {
     } else {
       setCurrentNote('');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageNum, notes, numPages]);
-  /* eslint-enable react-hooks/exhaustive-deps */
 
   // Save notes to session storage whenever they change
   useEffect(() => {
