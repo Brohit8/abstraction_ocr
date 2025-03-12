@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useRef, useState, MouseEvent } from 'react';
-import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist/types/src/display/api';
+import { useEffect, useRef, useState, MouseEvent, useCallback } from 'react';
+import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist/types/src/display/api';
 
 export default function PDFViewer() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -43,7 +43,8 @@ export default function PDFViewer() {
     setScale(prevScale => Math.max(prevScale - 0.25, 0.5));
   };
 
-  const fitToPage = async () => {
+  // Fit the PDF to the container size, wrapped in useCallback to avoid dependency cycles
+  const fitToPage = useCallback(async () => {
     if (!pdfDoc || !containerRef.current) return;
 
     try {
@@ -64,7 +65,7 @@ export default function PDFViewer() {
     } catch (error) {
       console.error('Error calculating fit to page:', error);
     }
-  };
+  }, [pdfDoc, pageNum]);
 
   // Panning handlers
   const handleMouseDown = (e: MouseEvent<HTMLDivElement>) => {
@@ -111,7 +112,9 @@ export default function PDFViewer() {
   };
 
   const handleUploadClick = () => {
-    fileInputRef.current.click();
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
   };
 
   // Load the PDF document
@@ -249,7 +252,7 @@ export default function PDFViewer() {
         setIsPageRendering(true);
 
         // Only show loading on initial load, not on page changes
-        if (!canvasRef.current || !canvasRef.current.getContext('2d').getImageData(0, 0, 1, 1)) {
+        if (!canvasRef.current || !canvasRef.current.getContext('2d')?.getImageData(0, 0, 1, 1)) {
           setIsLoading(true);
         }
         console.log(`Rendering page ${pageNum} at scale ${scale}`);
